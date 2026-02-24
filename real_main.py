@@ -8,6 +8,7 @@ import math
 import torch
 import torch.nn as nn
 from torchvision.models import resnet18, ResNet18_Weights
+import wandb
 
 from src.utils import set_seed, freeze_model, melt_model
 from src.data import (get_retain_forget_datasets, get_dataloaders, get_train_test_datasets,
@@ -18,24 +19,44 @@ from src.eval import evaluate
 from src.forget import forget, sample_from_exact_marginal, estimate_marginal_kl_distance
 from src.metrics import membership_inference_attack, relearn_time
 
+from torch.utils.data import Subset
 
-def log_eval(model, train_loader, val_loader, retain_loader, forget_loader, surr_loader, criterion, device):
+def log_eval(model, train_loader, val_loader, retain_loader, forget_loader, criterion, device, dss_loader=None):
     train_acc = evaluate(train_loader, model, criterion, device=device, log=True)
     test_acc = evaluate(val_loader, model, criterion, device=device, log=True)
     retain_acc = evaluate(retain_loader, model, criterion, device=device, log=True)
     forget_acc = evaluate(forget_loader, model, criterion, device=device, log=True)
-    surr_acc = evaluate(surr_loader, model, criterion, device=device, log=True)
-    logging.info(
-        'train: {}, test: {}, retain: {}, forget: {}, surrogate:{}'.format(train_acc, test_acc, retain_acc, forget_acc,
-                                                                           surr_acc))
-    return forget_acc
+    
+    metrics = {
+        'train_acc': train_acc,
+        'test_acc': test_acc,
+        'retain_acc': retain_acc,
+        'forget_acc': forget_acc
+    }
+    
+    # evaluate on D_ss subset
+    if dss_loader is not None:
+        dss_acc = evaluate(dss_loader, model, criterion, device=device, log=True)
+        metrics['dss_acc'] = dss_acc
+        logging.info(
+            'train: {}, test: {}, retain: {}, forget: {}, D_ss: {}'.format(train_acc, test_acc, retain_acc, forget_acc, dss_acc))
+    else:
+        logging.info(
+            'train: {}, test: {}, retain: {}, forget: {}'.format(train_acc, test_acc, retain_acc, forget_acc))
+    
+    # TODO: mais Old surrogate evaluation
+    # surr_acc = evaluate(surr_loader, model, criterion, device=device, log=True)
+    # logging.info(
+    #     'train: {}, test: {}, retain: {}, forget: {}, surrogate:{}'.format(train_acc, test_acc, retain_acc, forget_acc,
+    #                                                                        surr_acc))
+    return metrics
 
 
 def return_model(model_config, dim, num_class):
     if model_config['type'] == 'mlp':
         bias = model_config['bias']
         if model_config['hidden_sizes'] is not None:
-            model_arr = []
+            model_arr = [nn.Flatten()]  # Flatten input images first # it was []
             curr_in = dim
             for size in model_config['hidden_sizes']:
                 model_arr.append(nn.Linear(curr_in, size, bias=bias))
@@ -45,7 +66,7 @@ def return_model(model_config, dim, num_class):
             model_arr.append(nn.Linear(curr_in, num_class, bias=bias))
             model = nn.Sequential(*model_arr)
         else:
-            model = nn.Linear(dim, num_class, bias=bias)
+            model = nn.Sequential(nn.Flatten(), nn.Linear(dim, num_class, bias=bias)) # 
         return model
     elif model_config['type'] == 'resnet18':
         model = resnet18(weights=ResNet18_Weights.DEFAULT)
@@ -107,6 +128,23 @@ def main():
     logging.basicConfig(filename=os.path.join(experiment_dir, 'experiment.log'), level=logging.INFO)
     logging.info('experiment started at %s', now.strftime('%Y-%m-%d %H:%M:%S'))
 
+    # Initialize wandb
+    wandb_config = config['setup'].get('wandb', {})
+    if wandb_config.get('enabled', False):
+        wandb.init(
+            project=wandb_config.get('project', 'certified-unlearning'),
+            entity=wandb_config.get('entity', None),
+            config=config,
+            name='{}-{}'.format(about, str(about_value)),
+            dir=experiment_dir,
+            tags=['subsampled-hessian']
+        )
+        logging.info('wandb initialized: project={}, entity={}'.format(
+            wandb_config.get('project'), wandb_config.get('entity', 'default')))
+    else:
+        wandb.init(mode='disabled')
+        logging.info('wandb disabled')
+
     # copy config
     config_copy_path = os.path.join(experiment_dir, 'config.yaml')
     with open(config_copy_path, 'w') as file:
@@ -128,34 +166,48 @@ def main():
     logging.info('setting data')
     data_config = config['data']
     exact_dataset_type = data_config['exact_dataset']
-    surrogate_dataset_type = data_config['surrogate_dataset']
+    # TODO: mais - Old surrogate dataset approach
+    # surrogate_dataset_type = data_config['surrogate_dataset']
     dim = data_config['dim']
     num_class = data_config['num_class']
-    transforms = get_transforms(exact_dataset_type)
+    model_type = config['train']['model']['type']
+    transforms = get_transforms(exact_dataset_type, model_type=model_type)
     train_dataset, test_dataset = get_train_test_datasets(exact_dataset_type, transform=transforms,
                                                          train_path=data_config['train_path'],
                                                          test_path=data_config['test_path'],
                                                          save_path=data_config['save_path'],
                                                          device=device)
-    if surrogate_dataset_type is not None:
-        stransforms = get_transforms(surrogate_dataset_type)
-        surr_dataset, _ = get_train_test_datasets(surrogate_dataset_type, transform=transforms,
-                                                  train_path=data_config['strain_path'],
-                                                  test_path=data_config['stest_path'],
-                                                  save_path=data_config['ssave_path'],
-                                                  device=device)
-    else:
-        exact_size = int(len(train_dataset) / 2)
-        surr_size = len(train_dataset) - exact_size
-        dirichlet = data_config['dirichlet']
-        train_dataset, surr_dataset = get_exact_surr_datasets(train_dataset,
-                                                              target_size=exact_size,
-                                                              starget_size=surr_size,
-                                                              dirichlet=dirichlet, num_class=num_class)
+    
+    # TODO: mais COMMENTED Old surrogate dataset creation - not needed for subsampled-Hessian method
+    # if surrogate_dataset_type is not None:
+    #     stransforms = get_transforms(surrogate_dataset_type)
+    #     surr_dataset, _ = get_train_test_datasets(surrogate_dataset_type, transform=transforms,
+    #                                               train_path=data_config['strain_path'],
+    #                                               test_path=data_config['stest_path'],
+    #                                               save_path=data_config['ssave_path'],
+    #                                               device=device)
+    # else:
+    #     exact_size = int(len(train_dataset) / 2)
+    #     surr_size = len(train_dataset) - exact_size
+    #     dirichlet = data_config['dirichlet']
+    #     train_dataset, surr_dataset = get_exact_surr_datasets(train_dataset,
+    #                                                           target_size=exact_size,
+    #                                                           starget_size=surr_size,
+    #                                                           dirichlet=dirichlet, num_class=num_class)
 
-    logging.info('exact and surrogate dataset created')
-    logging.info('exact dataset size: {}, dim: {}'.format(len(train_dataset), dim))
-    logging.info('surrogate dataset size: {}, dim: {}'.format(len(surr_dataset), dim))
+    # NEW: Create subset D_ss for subsampled-Hessian computation
+    # D_ss is a subset of the training data used for Hessian approximation
+    subsample_ratio = config['unlearn'].get('subsample_ratio', 0.5)
+    dss_size = int(len(train_dataset) * subsample_ratio)
+    dss_indices = torch.randperm(len(train_dataset))[:dss_size].tolist()
+    
+    dss_dataset = Subset(train_dataset, dss_indices)
+    
+    logging.info('training dataset and D_ss subset created')
+    logging.info('full training dataset size: {}, dim: {}'.format(len(train_dataset), dim))
+    logging.info('D_ss subset size: {} ({:.1%} of training data)'.format(len(dss_dataset), subsample_ratio))
+    # mais COMMENTED surrogate dataset logging
+    # logging.info('surrogate dataset size: {}, dim: {}'.format(len(surr_dataset), dim))
     logging.info('#####################')
 
     logging.info('#####################')
@@ -168,12 +220,16 @@ def main():
     retain_dataset, forget_dataset = get_retain_forget_datasets(train_dataset, forget_ratio)
     train_loader, test_loader = get_dataloaders([train_dataset, test_dataset], train_config['batch_size'])
     retain_loader, forget_loader = get_dataloaders([retain_dataset, forget_dataset], train_config['batch_size'])
-    surr_loader = get_dataloaders(surr_dataset, train_config['batch_size'])
+    # NEW: Create loader for D_ss subset (used for Hessian computation)
+    dss_loader = get_dataloaders(dss_dataset, train_config['batch_size'])
+    # COMMENTED: Old surrogate loader - not needed for subsampled-Hessian method
+    # surr_loader = get_dataloaders(surr_dataset, train_config['batch_size'])
 
     logging.info('all dataloaders created')
     logging.info(
         'forget ratio: {}, retain dataset size: {}, forget dataset size: {}'.format(forget_ratio, len(retain_dataset),
                                                                                     len(forget_dataset)))
+    logging.info('D_ss subset loader created with {} samples'.format(len(dss_dataset)))
 
     lambda_param = train_config['lambda']
     criterion = L2RegularizedCrossEntropyLoss(lambda_param)
@@ -195,14 +251,28 @@ def main():
     num_epochs = train_config['num_epochs']
     logging.info('#####################')
     logging.info('INITIAL TRAINING')
-    train(train_loader, test_loader, model, criterion, optimizer, num_epoch=num_epochs, device=device)
-    target_acc = log_eval(model, train_loader, test_loader, retain_loader, forget_loader, surr_loader, criterion, device)
-    egensample_loader = sample_from_exact_marginal(model, langevin_config['num_samples'],
-                                                   langevin_config['input_size'],
-                                                   train_config['batch_size'],
-                                                   input_range=langevin_config['input_range'],
-                                                   max_iter=langevin_config['max_iter'],
-                                                   step_size=langevin_config['step_size'])
+    train(train_loader, test_loader, model, criterion, optimizer, num_epoch=num_epochs, device=device, log_prefix='original/')
+    metrics = log_eval(model, train_loader, test_loader, retain_loader, forget_loader, criterion, device, dss_loader=dss_loader)
+    target_acc = metrics['forget_acc']
+    
+    # Log to wandb
+    wandb.log({
+        'original/train_acc': metrics['train_acc'],
+        'original/test_acc': metrics['test_acc'],
+        'original/retain_acc': metrics['retain_acc'],
+        'original/forget_acc': metrics['forget_acc'],
+    })
+    if 'dss_acc' in metrics:
+        wandb.log({'original/dss_acc': metrics['dss_acc']})
+    
+    # COMMENTED: Langevin sampling - not needed for subsampled-Hessian method
+    # egensample_loader = sample_from_exact_marginal(model, langevin_config['num_samples'],
+    #                                                langevin_config['input_size'],
+    #                                                train_config['batch_size'],
+    #                                                input_range=langevin_config['input_range'],
+    #                                                max_iter=langevin_config['max_iter'],
+    #                                                step_size=langevin_config['step_size'])
+    
     model = model.to('cpu')
     # save model state dict
     model_save_path = os.path.join(experiment_dir, 'initial_model.pth')
@@ -210,32 +280,33 @@ def main():
     logging.info('initial model state dict saved to %s', model_save_path)
     logging.info('#####################')
 
-    # surrogate training
-    logging.info('#####################')
-    logging.info('SURROGATE MODEL TRAINING')
-    smodel = return_model(model_config, dim, num_class)
-    smodel = smodel.to(device)
-    optimizer = torch.optim.Adam(smodel.parameters(), lr=train_config['lr'])
-    train(surr_loader, test_loader, smodel, criterion, optimizer, num_epoch=num_epochs, device=device)
-    log_eval(smodel, train_loader, test_loader, retain_loader, forget_loader, surr_loader, criterion, device)
-    sgensample_loader = sample_from_exact_marginal(smodel, langevin_config['num_samples'],
-                                                   langevin_config['input_size'],
-                                                   train_config['batch_size'],
-                                                   input_range=langevin_config['input_range'],
-                                                   max_iter=langevin_config['max_iter'],
-                                                   step_size=langevin_config['step_size'])
-    smodel = smodel.to('cpu')
-    model_save_path = os.path.join(experiment_dir, 'surrogate_model.pth')
-    torch.save(smodel.state_dict(), model_save_path)
-    logging.info('surrogate model state dict saved to %s', model_save_path)
-    logging.info('#####################')
+    # COMMENTED: Old surrogate model training - not needed for subsampled-Hessian method
+    # # surrogate training
+    # logging.info('#####################')
+    # logging.info('SURROGATE MODEL TRAINING')
+    # smodel = return_model(model_config, dim, num_class)
+    # smodel = smodel.to(device)
+    # optimizer = torch.optim.Adam(smodel.parameters(), lr=train_config['lr'])
+    # train(surr_loader, test_loader, smodel, criterion, optimizer, num_epoch=num_epochs, device=device)
+    # log_eval(smodel, train_loader, test_loader, retain_loader, forget_loader, surr_loader, criterion, device)
+    # sgensample_loader = sample_from_exact_marginal(smodel, langevin_config['num_samples'],
+    #                                                langevin_config['input_size'],
+    #                                                train_config['batch_size'],
+    #                                                input_range=langevin_config['input_range'],
+    #                                                max_iter=langevin_config['max_iter'],
+    #                                                step_size=langevin_config['step_size'])
+    # smodel = smodel.to('cpu')
+    # model_save_path = os.path.join(experiment_dir, 'surrogate_model.pth')
+    # torch.save(smodel.state_dict(), model_save_path)
+    # logging.info('surrogate model state dict saved to %s', model_save_path)
+    # logging.info('#####################')
 
-    # kl distance estimation
-    _, kl_distance = estimate_marginal_kl_distance(sgensample_loader, egensample_loader, device)
-    _.to('cpu')
-    del _
-
-    logging.info('kl distance estimated using generated samples is {}'.format(kl_distance))
+    # COMMENTED: KL distance estimation - not needed for subsampled-Hessian method
+    # # kl distance estimation
+    # _, kl_distance = estimate_marginal_kl_distance(sgensample_loader, egensample_loader, device)
+    # _.to('cpu')
+    # del _
+    # logging.info('kl distance estimated using generated samples is {}'.format(kl_distance))
 
     # retrain
     logging.info('#####################')
@@ -243,13 +314,26 @@ def main():
     rmodel = return_model(model_config, dim, num_class)
     rmodel = rmodel.to(device)
     optimizer = torch.optim.Adam(rmodel.parameters(), lr=train_config['lr'])
-    train(retain_loader, test_loader, rmodel, criterion, optimizer, num_epoch=num_epochs, device=device)
-    log_eval(rmodel, train_loader, test_loader, retain_loader, forget_loader, surr_loader, criterion, device)
+    train(retain_loader, test_loader, rmodel, criterion, optimizer, num_epoch=num_epochs, device=device, log_prefix='retrained/')
+    metrics = log_eval(rmodel, train_loader, test_loader, retain_loader, forget_loader, criterion, device, dss_loader=dss_loader)
     mia_score = membership_inference_attack(rmodel, test_loader, forget_loader)
     logging.info('MIA {}'.format(mia_score))
     required_iters = relearn_time(rmodel, criterion, forget_loader, lr=train_config['lr'],
                                   target_acc=target_acc)
     logging.info('relearn time T {}'.format(required_iters))
+    
+    # Log to wandb
+    wandb.log({
+        'retrained/train_acc': metrics['train_acc'],
+        'retrained/test_acc': metrics['test_acc'],
+        'retrained/retain_acc': metrics['retain_acc'],
+        'retrained/forget_acc': metrics['forget_acc'],
+        'retrained/mia_score': mia_score,
+        'retrained/relearn_iters': required_iters,
+    })
+    if 'dss_acc' in metrics:
+        wandb.log({'retrained/dss_acc': metrics['dss_acc']})
+    
     rmodel = rmodel.to('cpu')
     model_save_path = os.path.join(experiment_dir, 'retrained_model.pth')
     torch.save(rmodel.state_dict(), model_save_path)
@@ -262,66 +346,156 @@ def main():
     eps_multiplier = unlearn_config['eps_multiplier']
     eps_power = unlearn_config['eps_power']
     delta = unlearn_config['delta']
-    smooth = unlearn_config['smooth']
-    sc = unlearn_config['sc']
-    lip = unlearn_config['lip']
-    hlip = unlearn_config['hlip']
-    surr = unlearn_config['surr']
-    known = unlearn_config['known']
-    linear = unlearn_config['linear']
-    parallel = unlearn_config['parallel']
-    cov = unlearn_config['cov']
-    if 'alpha' in unlearn_config.keys():
-        alpha = unlearn_config['alpha']
-    else:
-        alpha = 1
-    conjugate = unlearn_config['conjugate']
+    
+    # TODO: mais subsampled-Hessian parameters from config
+    eta = unlearn_config.get('eta', 0.01)
+    alpha = unlearn_config.get('alpha', 1.0)
+    beta = unlearn_config.get('beta', 1.0)
+    gamma = unlearn_config.get('gamma', 1.0)
+    L = unlearn_config.get('L', 1.0)
+    C_constant = unlearn_config.get('C_constant', 2.0)
+    
+    # Old parameters (may not be used in new algorithm)
+    smooth = unlearn_config.get('smooth', 1)
+    sc = unlearn_config.get('sc', 1)
+    lip = unlearn_config.get('lip', 1)
+    hlip = unlearn_config.get('hlip', 1)
+    
+    # Computation options
+    linear = unlearn_config.get('linear', False)
+    parallel = unlearn_config.get('parallel', False)
+    cov = unlearn_config.get('cov', False)
+    conjugate = unlearn_config.get('conjugate', False)
+    
+    # Method selection
+    use_subsampled = unlearn_config.get('subsampled', False)
 
-    # unlearn with exact
-    logging.info('#####################')
-    logging.info('UNLEARN WITH EXACT')
-    logging.info('noise --> eps_multiplier: {}, eps_power: {}, delta: {}, smooth: {}, sc: {}, lip: {}, hlip: {}'.format(
-        eps_multiplier, eps_power, delta, smooth, sc, lip, hlip))
-    eps = eps_multiplier * (math.e ** eps_power)
-    umodel = forget(model, train_loader, forget_loader, forget_loader, criterion, device, save_path=experiment_dir,
-                    eps=eps, delta=delta, smooth=smooth, sc=sc, lip=lip, hlip=hlip, linear=linear,
-                    parallel=parallel, cov=cov, alpha=alpha, conjugate=conjugate)
-    log_eval(umodel, train_loader, test_loader, retain_loader, forget_loader, surr_loader, criterion, device)
-    mia_score = membership_inference_attack(umodel, test_loader, forget_loader)
-    logging.info('MIA {}'.format(mia_score))
-    required_iters = relearn_time(umodel, criterion, forget_loader, lr=train_config['lr'],
-                                  target_acc=target_acc)
-    logging.info('relearn time T {}'.format(required_iters))
-    umodel = umodel.to('cpu')
-    model_save_path = os.path.join(experiment_dir, 'uexact_model.pth')
-    torch.save(umodel.state_dict(), model_save_path)
-    logging.info('unlearn with exact model state dict saved to %s', model_save_path)
-    logging.info('#####################')
+    # COMMENTED: Old unlearn with exact approach
+    # # unlearn with exact
+    # logging.info('#####################')
+    # logging.info('UNLEARN WITH EXACT')
+    # logging.info('noise --> eps_multiplier: {}, eps_power: {}, delta: {}, smooth: {}, sc: {}, lip: {}, hlip: {}'.format(
+    #     eps_multiplier, eps_power, delta, smooth, sc, lip, hlip))
+    # eps = eps_multiplier * (math.e ** eps_power)
+    # umodel = forget(model, train_loader, forget_loader, forget_loader, criterion, device, save_path=experiment_dir,
+    #                 eps=eps, delta=delta, smooth=smooth, sc=sc, lip=lip, hlip=hlip, linear=linear,
+    #                 parallel=parallel, cov=cov, alpha=alpha, conjugate=conjugate)
+    # log_eval(umodel, train_loader, test_loader, retain_loader, forget_loader, criterion, device, dss_loader=dss_loader)
+    # mia_score = membership_inference_attack(umodel, test_loader, forget_loader)
+    # logging.info('MIA {}'.format(mia_score))
+    # required_iters = relearn_time(umodel, criterion, forget_loader, lr=train_config['lr'],
+    #                               target_acc=target_acc)
+    # logging.info('relearn time T {}'.format(required_iters))
+    # umodel = umodel.to('cpu')
+    # model_save_path = os.path.join(experiment_dir, 'uexact_model.pth')
+    # torch.save(umodel.state_dict(), model_save_path)
+    # logging.info('unlearn with exact model state dict saved to %s', model_save_path)
+    # logging.info('#####################')
 
-    if surr:
-        # unlearn with surrogate
+    # Subsampled-Hessian Unlearning
+    if use_subsampled:
+        from src.forget import subsampled_hessian_unlearning
+        
         logging.info('#####################')
-        logging.info('UNLEARN WITH SURROGATE')
-        logging.info(
-            'noise --> eps_multiplier: {}, eps_power: {}, delta: {}, smooth: {}, sc: {}, lip: {}, hlip: {}, kl_distance: {}'.format(
-                eps_multiplier, eps_power, delta, smooth, sc, lip, hlip, kl_distance))
-        smodel = smodel.to(device)
-        usmodel = forget(model, surr_loader, forget_loader, forget_loader, criterion, device, save_path=experiment_dir,
-                         eps=eps, delta=delta, smooth=smooth, sc=sc, lip=lip, hlip=hlip, surr=surr,
-                         known=known, surr_loader=surr_loader, surr_model=smodel, kl_distance=kl_distance,
-                         linear=linear, parallel=parallel, cov=cov, alpha=alpha, conjugate=conjugate, prev_size=len(train_dataset))
-        log_eval(usmodel, train_loader, test_loader, retain_loader, forget_loader, surr_loader, criterion, device)
-        smodel = smodel.to('cpu')
-        mia_score = membership_inference_attack(usmodel, test_loader, forget_loader)
+        logging.info('SUBSAMPLED-HESSIAN UNLEARNING')
+        
+        # Calculate dataset sizes
+        n1 = len(train_dataset)  # Total training size
+        n2 = len(dss_dataset)    # D_ss subset size
+        m = len(forget_dataset)  # Forget set size
+        
+        # Calculate number of model parameters (d)
+        d = sum(p.numel() for p in model.parameters() if p.requires_grad)
+        
+        logging.info('n1={}, n2={}, m={}, d={}'.format(n1, n2, m, d))
+        logging.info('Parameters: eps={}, delta={}, eta={}'.format(eps_multiplier * (math.e ** eps_power), delta, eta))
+        logging.info('Regularity: alpha={}, beta={}, gamma={}, L={}'.format(alpha, beta, gamma, L))
+        logging.info('Hessian method: {}'.format('Analytical (linearized)' if linear else 'Conjugate Gradient (implicit)'))
+        
+        eps = eps_multiplier * (math.e ** eps_power)
+        
+        umodel = subsampled_hessian_unlearning(
+            model=model,
+            dss_loader=dss_loader,  # D_ss for Hessian computation
+            forget_loader=forget_loader,  # D_u for unlearning
+            criterion=criterion,
+            device=device,
+            n1=n1,          
+            n2=n2,         
+            m=m,            
+            eps=eps,        
+            delta=delta,    
+            eta=eta,        
+            alpha=alpha,    
+            beta=beta,      
+            gamma=gamma,    
+            L=L,            
+            d=d,           
+            C_constant=C_constant,  
+            linear=linear   # Use analytical Hessian (True) or conjugate gradient (False)
+        )
+        
+        metrics = log_eval(umodel, train_loader, test_loader, retain_loader, forget_loader, criterion, device, dss_loader=dss_loader)
+        mia_score = membership_inference_attack(umodel, test_loader, forget_loader)
         logging.info('MIA {}'.format(mia_score))
-        required_iters = relearn_time(usmodel, criterion, forget_loader, lr=train_config['lr'],
+        required_iters = relearn_time(umodel, criterion, forget_loader, lr=train_config['lr'],
                                       target_acc=target_acc)
         logging.info('relearn time T {}'.format(required_iters))
-        usmodel = usmodel.to('cpu')
-        model_save_path = os.path.join(experiment_dir, 'usurr_model.pth')
-        torch.save(usmodel.state_dict(), model_save_path)
-        logging.info('unlearn with surrogate model state dict saved to %s', model_save_path)
+        
+        # Log to wandb
+        wandb.log({
+            'unlearned/train_acc': metrics['train_acc'],
+            'unlearned/test_acc': metrics['test_acc'],
+            'unlearned/retain_acc': metrics['retain_acc'],
+            'unlearned/forget_acc': metrics['forget_acc'],
+            'unlearned/mia_score': mia_score,
+            'unlearned/relearn_iters': required_iters,
+            'hyperparams/eps': eps,
+            'hyperparams/delta': delta,
+            'hyperparams/eta': eta,
+            'hyperparams/alpha': alpha,
+            'hyperparams/beta': beta,
+            'hyperparams/gamma': gamma,
+            'hyperparams/subsample_ratio': subsample_ratio,
+        })
+        if 'dss_acc' in metrics:
+            wandb.log({'unlearned/dss_acc': metrics['dss_acc']})
+        
+        umodel = umodel.to('cpu')
+        model_save_path = os.path.join(experiment_dir, 'subsampled_hessian_model.pth')
+        torch.save(umodel.state_dict(), model_save_path)
+        logging.info('subsampled-Hessian unlearned model saved to %s', model_save_path)
         logging.info('#####################')
+
+    # COMMENTED: Old surrogate unlearning - not needed for subsampled-Hessian method
+    # if surr:
+    #     # unlearn with surrogate
+    #     logging.info('#####################')
+    #     logging.info('UNLEARN WITH SURROGATE')
+    #     logging.info(
+    #         'noise --> eps_multiplier: {}, eps_power: {}, delta: {}, smooth: {}, sc: {}, lip: {}, hlip: {}, kl_distance: {}'.format(
+    #             eps_multiplier, eps_power, delta, smooth, sc, lip, hlip, kl_distance))
+    #     smodel = smodel.to(device)
+    #     usmodel = forget(model, surr_loader, forget_loader, forget_loader, criterion, device, save_path=experiment_dir,
+    #                      eps=eps, delta=delta, smooth=smooth, sc=sc, lip=lip, hlip=hlip, surr=surr,
+    #                      known=known, surr_loader=surr_loader, surr_model=smodel, kl_distance=kl_distance,
+    #                      linear=linear, parallel=parallel, cov=cov, alpha=alpha, conjugate=conjugate, prev_size=len(train_dataset))
+    #     log_eval(usmodel, train_loader, test_loader, retain_loader, forget_loader, criterion, device, dss_loader=dss_loader)
+    #     smodel = smodel.to('cpu')
+    #     mia_score = membership_inference_attack(usmodel, test_loader, forget_loader)
+    #     logging.info('MIA {}'.format(mia_score))
+    #     required_iters = relearn_time(usmodel, criterion, forget_loader, lr=train_config['lr'],
+    #                                   target_acc=target_acc)
+    #     logging.info('relearn time T {}'.format(required_iters))
+    #     usmodel = usmodel.to('cpu')
+    #     model_save_path = os.path.join(experiment_dir, 'usurr_model.pth')
+    #     torch.save(usmodel.state_dict(), model_save_path)
+    #     logging.info('unlearn with surrogate model state dict saved to %s', model_save_path)
+    #     logging.info('#####################')
+    
+    # Finish wandb run
+    wandb.finish()
+    logging.info('experiment completed')
 
 
 if __name__ == '__main__':

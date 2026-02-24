@@ -1,0 +1,69 @@
+setup:
+  seed: 42
+  device: 0
+  base_save_dir: ./experiments
+  about: unlearn-forget_ratio
+  wandb:
+    enabled: true
+    project: certified-unlearning
+    entity: null  # wandb username - mais.khoury
+    name: cifar10_subsampled_forget_ratio_0.1
+# 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 
+
+data:
+  exact_dataset: cifar10
+  surrogate_dataset: null  # Not using surrogate dataset anymore
+  dim: 3072  # 32*32*3 for CIFAR10
+  num_class: 10
+  train_path: null
+  test_path: null
+  save_path: ./data
+  # For subset D_ss
+  dirichlet: null
+  strain_path: null
+  stest_path: null
+  ssave_path: null
+
+train:
+  batch_size: 128
+  num_epochs: 50
+  lr: 0.001
+  lambda: 0.01  # L2 regularization
+  model:
+    type: mlp # resnet18 try it 
+    hidden_sizes: [512, 256]
+    activation: relu
+    bias: true
+
+unlearn:
+  forget_ratio: 0.1
+  # Privacy parameters
+  eps_multiplier: 1.0
+  eps_power: 0
+  delta: 0.00001         # Privacy parameter (probability of privacy failure)
+  eta: 0.01              # Confidence parameter (failure probability) - user chooses this
+  # Regularity assumptions (Assumption 1 from paper)
+  alpha: 1.0             # Strong convexity parameter - alpha
+  beta: 1.0              # Smoothness parameter - beta
+  gamma: 1.0             # Hessian-Lipschitz parameter - gamma
+  L: 1.0                 # Lipschitz constant
+  C_constant: 2.0        # Constant for concentration bound
+  # Old parameters (may not be used)
+  smooth: 1
+  sc: 1
+  lip: 1
+  hlip: 1
+  # Method selection
+  surr: false            # Not using surrogate approach
+  known: false
+  linear: true           # TRUE = Analytical Hessian (paper's linearized method)
+                         # FALSE = Conjugate gradient (implicit Hessian)
+  parallel: false
+  cov: false
+  conjugate: false       # Use Newton update instead of conjugate gradient
+  
+  # Subsampled-Hessian method parameters
+  subsampled: true       # Enable the new subsampled-Hessian algorithm
+  subsample_ratio: 0.3   # Use 30% of training data for D_ss subset
+
+langevin:

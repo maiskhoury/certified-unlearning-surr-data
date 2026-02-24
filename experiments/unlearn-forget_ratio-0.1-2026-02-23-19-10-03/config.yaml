@@ -1,0 +1,58 @@
+data:
+  dim: 3072
+  dirichlet: null
+  exact_dataset: cifar10
+  num_class: 10
+  save_path: ./data
+  ssave_path: null
+  stest_path: null
+  strain_path: null
+  surrogate_dataset: null
+  test_path: null
+  train_path: null
+langevin: null
+setup:
+  about: unlearn-forget_ratio
+  base_save_dir: ./experiments
+  device: 0
+  seed: 42
+  wandb:
+    enabled: true
+    entity: null
+    name: cifar10_subsampled_forget_ratio_0.1
+    project: certified-unlearning
+train:
+  batch_size: 128
+  lambda: 0.01
+  lr: 0.001
+  model:
+    activation: relu
+    bias: true
+    hidden_sizes:
+    - 512
+    - 256
+    type: mlp
+  num_epochs: 50
+unlearn:
+  C_constant: 2.0
+  L: 1.0
+  alpha: 1.0
+  beta: 1.0
+  conjugate: false
+  cov: false
+  delta: 1.0e-05
+  eps_multiplier: 1.0
+  eps_power: 0
+  eta: 0.01
+  forget_ratio: 0.1
+  gamma: 1.0
+  hlip: 1
+  known: false
+  linear: false
+  lip: 1
+  parallel: false
+  sc: 1
+  smooth: 1
+  subsample_ratio: 0.3
+  subsampled: true
+  surr: false

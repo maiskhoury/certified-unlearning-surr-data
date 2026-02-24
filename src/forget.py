@@ -689,6 +689,148 @@ def set_noise(surr_size, forget_size, grad,
     return update
 
 
+######################################### mais added 
+
+def subsampled_hessian_unlearning(model, dss_loader, forget_loader, criterion, device, 
+                                   n1, n2, m, eps, delta, eta, 
+                                   alpha, beta, gamma, L, d, C_constant=2.0, linear=False):
+    """
+    Algorithm 1: Subsampled hessian unlearning mechanism
+    
+    Parameters:
+        model: Trained model with parameters w*
+        dss_loader: DataLoader for D_ss subset (for Hessian computation)
+        forget_loader: DataLoader for D_u (forget set)
+        criterion: Loss function
+        device: Device 
+        n1: Total training dataset size |D|
+        n2: Size of D_ss subset
+        m: Size of forget set |D_u|
+        eps: Privacy budget epsilon
+        delta: Privacy parameter small delta
+        eta: Confidence parameter (failure probability)
+        alpha: Strong convexity parameter - alpha
+        beta: Smoothness parameter - beta
+        gamma: Hessian-Lipschitz parameter - gamma
+        L: Lipschitz constant
+        d: Number of model parameters
+        C_constant: Concentration bound constant (default: 2.0)
+        linear: If True, use analytical Hessian (paper's method for linearized networks)
+                If False, use conjugate gradient with implicit Hessian-vector products
+    
+    Returns:
+        Unlearned model w'_r
+    """
+    from copy import deepcopy
+    import logging
+    
+    logging.info('Starting subsampled hessian unlearning...')
+    
+    # Make a copy of the model
+    umodel = deepcopy(model.to('cpu'))
+    
+    # Step 1: Compute noise scale 
+    logging.info('Step 1: Computing noise scale')
+    
+    # 1a. Calculate xi 
+    finite_correction = math.sqrt(1 - (n2 - 1) / (n1 - 1))
+    xi = C_constant * beta * math.sqrt(math.log(2 * d / eta) / n2) * finite_correction
+    logging.info('xi (concentration bound) = {:.6f}'.format(xi))
+    
+    # 1b. Calculate forget set gradient norm
+    grads = calculate_grad(umodel, forget_loader, criterion)
+    grad_norm, prev_sizes = calculate_grad_norm(grads)
+    logging.info('  Gradient norm = {:.6f}'.format(grad_norm))
+    
+    # 1c. Calculate the full Delta (deviation bound)
+    term1 = (2 * gamma * L * (m**2)) / ((alpha**3) * (n1**2))
+    denom = (n1 * (alpha - xi) - m * beta) * (n1 * alpha - m * beta)
+    term2 = (m * n1 * xi * grad_norm) / denom
+    upper_bound_delta = term1 + term2
+    logging.info('  Upper bound Delta = {:.6f} (term1={:.6f}, term2={:.6f})'.format(
+        upper_bound_delta, term1, term2))
+    
+    # 1d. Compute noise scale
+    sigma = (upper_bound_delta / eps) * math.sqrt(2 * math.log(1.25 / delta))
+    logging.info('  Noise scale sigma = {:.6f}'.format(sigma))
+    
+    # Step 2-3: Compute parameter update
+    if linear:
+        # Option 1: Analytical Hessian (paper's method for linearized networks)
+        logging.info('Step 2-3: Computing H_Dr using analytical Hessian (linearized network)')
+        logging.info('  Computing H_Dss on subset with {} samples...'.format(len(dss_loader.dataset)))
+        H_dss = calculate_hessian(umodel, dss_loader, criterion, linear=True)
+        
+        logging.info('  Computing H_Du on forget set with {} samples...'.format(len(forget_loader.dataset)))
+        H_du = calculate_hessian(umodel, forget_loader, criterion, linear=True)
+        
+        # Compute H_Dr = (n1 * H_Dss - m * H_Du) / (n1 - m)
+        H_dr = (n1 * H_dss - m * H_du) / (n1 - m)
+        logging.info('  Computed H_Dr(w*) analytically')
+        
+        # Compute update: m/(n1-m) * H_Dr^(-1) * grad
+        update = calculate_update(H_dr, grads, device, hess_ss=(n1 - m), grad_ss=m, cov=False)
+        update_model(umodel, update)
+        logging.info('  Applied parameter update using analytical Hessian')
+    else:
+        # Option 2: Conjugate Gradient with implicit Hessian-vector products
+        # This avoids computing the full Hessian matrix (11TB for MLP!)
+        logging.info('Step 2-3: Computing H_Dr^{-1} * grad using conjugate gradient (implicit Hessian)')
+        logging.info('  Creating implicit Hessian-vector product functions...')
+        
+        # Define HVP function for D_ss
+        params = [param for param in umodel.parameters() if param.requires_grad]
+        def hvp_fn_dss(v):
+            return batched_hvp(umodel, dss_loader, criterion, params, v, device)
+        
+        # Define HVP function for D_u (forget set)
+        def hvp_fn_forget(v):
+            return batched_hvp(umodel, forget_loader, criterion, params, v, device)
+        
+        # Define combined HVP for H_Dr = (n1*H_Dss - m*H_Du)/(n1-m)
+        def hvp_fn_dr(v):
+            hvp_dss = hvp_fn_dss(v)
+            hvp_du = hvp_fn_forget(v)
+            return (n1 * hvp_dss - m * hvp_du) / (n1 - m)
+        
+        # Solve H_Dr^{-1} * grad using conjugate gradient (no full Hessian!)
+        flat_grad, prev_sizes = _linearize_grads(grads)
+        scaled_grad = (m / (n1 - m)) * flat_grad  # Scale gradient by m/(n1-m)
+        
+        logging.info('  Solving linear system using conjugate gradient...')
+        update_flat = conjugate_gradient(hvp_fn_dr, scaled_grad, tol=1e-6, max_iter=100)
+        
+        # Reshape update to match parameter shapes
+        update = _adjust_update(update_flat, prev_sizes)
+        update_model(umodel, update)
+        logging.info('  Applied parameter update (no full Hessian computed!)')
+    
+    # Step 4: Sample noise n from N(0, sigma^2I)
+    logging.info('Step 4: Sampling Gaussian noise')
+    
+    # Calculate total number of parameters
+    model_size = 0
+    for size in prev_sizes:
+        curr_size = 1
+        for s in size:
+            curr_size *= s
+        model_size += curr_size
+    
+    # Sample noise
+    noise = torch.normal(0, sigma, size=(model_size,))
+    noise = _adjust_update(noise, prev_sizes)
+    logging.info('  Sampled noise with sigma = {:.6f}'.format(sigma))
+    
+    # Step 5: Return w'_r = w_r + n
+    logging.info('Step 5: Adding noise to obtain final unlearned model')
+    update_model(umodel, noise)
+    
+    umodel = umodel.to(device)
+    logging.info('Subsampled-Hessian Unlearning completed!')
+    
+    return umodel
+
+
 #########################################
 
 

@@ -1,0 +1,182 @@
+_wandb:
+    value:
+        cli_version: 0.25.0
+        e:
+            2pam6q9bdio0k2w4edtwfb65h2lxcw84:
+                args:
+                    - --config
+                    - configs/cifar10_subsampled.yaml
+                codePath: real_main.py
+                codePathLocal: real_main.py
+                cpu_count: 128
+                cpu_count_logical: 128
+                cudaVersion: "12.9"
+                disk:
+                    /:
+                        total: "470239264768"
+                        used: "48928886784"
+                email: mais.khoury@campus.technion.ac.il
+                executable: /home/mais.khoury/miniconda3/envs/unlearning-env/bin/python
+                git:
+                    commit: fb057e6f8ad1a89c6dc5fc775ecd78a1c2250c3d
+                    remote: git@github.com:info-ucr/certified-unlearning-surr-data.git
+                gpu: NVIDIA L40S
+                gpu_count: 1
+                gpu_nvidia:
+                    - architecture: Ada
+                      cudaCores: 18176
+                      memoryTotal: "51527024640"
+                      name: NVIDIA L40S
+                      uuid: GPU-b4837167-269e-9708-513f-a952ca764b56
+                host: dym-lab3
+                memory:
+                    total: "1081942855680"
+                os: Linux-5.15.0-151-generic-x86_64-with-glibc2.35
+                program: /home/mais.khoury/unlearning_project/certified-unlearning-surr-data/real_main.py
+                python: CPython 3.10.19
+                root: ./experiments/unlearn-forget_ratio-0.1-2026-02-23-19-10-03
+                slurm:
+                    cluster_name: newton
+                    conf: /var/spool/slurmd/conf-cache/slurm.conf
+                    cpu_bind: quiet,mask_cpu:0x800000000000800000000000
+                    cpu_bind_list: 0x800000000000800000000000
+                    cpu_bind_type: 'mask_cpu:'
+                    cpu_bind_verbose: quiet
+                    cpus_on_node: "4"
+                    cpus_per_task: "4"
+                    gpus_on_node: "1"
+                    gtids: "0"
+                    job_account: cs
+                    job_cpus_per_node: "4"
+                    job_end_time: "1771880988"
+                    job_gid: "243270145"
+                    job_gpus: "6"
+                    job_group: domain^users
+                    job_id: "68087808"
+                    job_name: subsampled_unlearning
+                    job_nodelist: dym-lab3
+                    job_num_nodes: "1"
+                    job_partition: public
+                    job_qos: newton
+                    job_start_time: "1771866588"
+                    job_uid: "243319802"
+                    job_user: mais.khoury
+                    jobid: "68087808"
+                    launch_node_ipaddr: 132.68.39.200
+                    localid: "0"
+                    mem_per_node: "16384"
+                    mpi_type: pmi2
+                    nnodes: "1"
+                    node_aliases: (null)
+                    nodeid: "0"
+                    nodelist: dym-lab3
+                    nprocs: "1"
+                    ntasks: "1"
+                    prio_process: "0"
+                    procid: "0"
+                    pty_port: "43091"
+                    pty_win_col: "193"
+                    pty_win_row: "48"
+                    srun_comm_host: 132.68.39.200
+                    srun_comm_port: "36479"
+                    step_gpus: "6"
+                    step_id: "0"
+                    step_launcher_port: "36479"
+                    step_nodelist: euler1
+                    step_num_nodes: "1"
+                    step_num_tasks: "1"
+                    step_tasks_per_node: "1"
+                    stepid: "0"
+                    submit_dir: /home/mais.khoury/unlearning_project/certified-unlearning-surr-data
+                    submit_host: euler1
+                    task_pid: "3517042"
+                    tasks_per_node: "1"
+                    topology_addr: dym-lab3
+                    topology_addr_pattern: node
+                    working_cluster: newton:newton:6817:9984:101
+                startedAt: "2026-02-23T17:10:04.648036Z"
+                writerId: 2pam6q9bdio0k2w4edtwfb65h2lxcw84
+        m: []
+        python_version: 3.10.19
+        t:
+            "1":
+                - 1
+                - 5
+                - 41
+                - 53
+            "2":
+                - 1
+                - 5
+                - 41
+                - 53
+            "3":
+                - 13
+                - 15
+                - 16
+            "4": 3.10.19
+            "5": 0.25.0
+            "12": 0.25.0
+            "13": linux-x86_64
+data:
+    value:
+        dim: 3072
+        dirichlet: null
+        exact_dataset: cifar10
+        num_class: 10
+        save_path: ./data
+        ssave_path: null
+        stest_path: null
+        strain_path: null
+        surrogate_dataset: null
+        test_path: null
+        train_path: null
+langevin:
+    value: null
+setup:
+    value:
+        about: unlearn-forget_ratio
+        base_save_dir: ./experiments
+        device: 0
+        seed: 42
+        wandb:
+            enabled: true
+            entity: null
+            name: cifar10_subsampled_forget_ratio_0.1
+            project: certified-unlearning
+train:
+    value:
+        batch_size: 128
+        lambda: 0.01
+        lr: 0.001
+        model:
+            activation: relu
+            bias: true
+            hidden_sizes:
+                - 512
+                - 256
+            type: mlp
+        num_epochs: 50
+unlearn:
+    value:
+        C_constant: 2
+        L: 1
+        alpha: 1
+        beta: 1
+        conjugate: false
+        cov: false
+        delta: 1e-05
+        eps_multiplier: 1
+        eps_power: 0
+        eta: 0.01
+        forget_ratio: 0.1
+        gamma: 1
+        hlip: 1
+        known: false
+        linear: false
+        lip: 1
+        parallel: false
+        sc: 1
+        smooth: 1
+        subsample_ratio: 0.3
+        subsampled: true
+        surr: false

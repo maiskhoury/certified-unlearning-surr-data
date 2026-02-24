@@ -246,14 +246,23 @@ def get_exact_surr_datasets(dataset,
                                        starget_size=starget_size, starget_ratios=client_class_distributions[1])
 
 
-def get_transforms(idx):
+def get_transforms(idx, model_type='resnet18'):
     if idx == 'cifar10':
-        return v2.Compose([
-            v2.Resize((224, 224), interpolation=InterpolationMode.BILINEAR),  # ResNet18 expects 224x224 input size
-            v2.ToImage(),
-            v2.ToDtype(torch.float32, scale=True),
-            v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),  # Normalization for pretrained models
-        ])
+        if model_type == 'mlp':
+            # For MLP: keep original 32x32 size, simple normalization
+            return v2.Compose([
+                v2.ToImage(),
+                v2.ToDtype(torch.float32, scale=True),
+                v2.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]),
+            ])
+        else:
+            # For ResNet18: resize to 224x224, use ImageNet normalization
+            return v2.Compose([
+                v2.Resize((224, 224), interpolation=InterpolationMode.BILINEAR),  # ResNet18 expects 224x224 input size
+                v2.ToImage(),
+                v2.ToDtype(torch.float32, scale=True),
+                v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),  # Normalization for pretrained models
+            ])
     elif idx == 'caltech256' or idx == 'stanforddogs' or idx == 'cifar100':
         return v2.Compose([
             v2.Resize((224, 224), interpolation=InterpolationMode.BILINEAR),  # ResNet18 expects 224x224 input size
