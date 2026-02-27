@@ -19,7 +19,7 @@ from src.eval import evaluate
 from src.forget import forget, sample_from_exact_marginal, estimate_marginal_kl_distance
 from src.metrics import membership_inference_attack, relearn_time
 
-from torch.utils.data import Subset
+from torch.utils.data import Subset, DataLoader, TensorDataset
 
 def log_eval(model, train_loader, val_loader, retain_loader, forget_loader, criterion, device, dss_loader=None):
     train_acc = evaluate(train_loader, model, criterion, device=device, log=True)
@@ -53,10 +53,40 @@ def log_eval(model, train_loader, val_loader, retain_loader, forget_loader, crit
 
 
 def return_model(model_config, dim, num_class):
-    if model_config['type'] == 'mlp':
+    # Simple models for 224x224 input using nn.Sequential
+    if model_config['type'] == 'linear':
+        # Linear layer on 512-dim input (like ResNet avgpool output)
+        return nn.Sequential(
+            nn.Flatten(),
+            nn.Linear(512, num_class, bias=True)
+        )
+    elif model_config['type'] == 'conv1':
+        # One conv layer (512 out channels), batch norm, adaptive pooling, linear
+        return nn.Sequential(
+            nn.Conv2d(3, 512, kernel_size=3, stride=2, padding=1),
+            nn.BatchNorm2d(512),
+            nn.ReLU(),
+            nn.AdaptiveAvgPool2d((1, 1)),
+            nn.Flatten(),
+            nn.Linear(512, num_class, bias=True)
+        )
+    elif model_config['type'] == 'conv2':
+        # Two conv layers (second with 512 out channels), batch norm, adaptive pooling, linear
+        return nn.Sequential(
+            nn.Conv2d(3, 256, kernel_size=3, stride=2, padding=1),
+            nn.BatchNorm2d(256),
+            nn.ReLU(),
+            nn.Conv2d(256, 512, kernel_size=3, stride=2, padding=1),
+            nn.BatchNorm2d(512),
+            nn.ReLU(),
+            nn.AdaptiveAvgPool2d((1, 1)),
+            nn.Flatten(),
+            nn.Linear(512, num_class, bias=True)
+        )
+    elif model_config['type'] == 'mlp':
         bias = model_config['bias']
         if model_config['hidden_sizes'] is not None:
-            model_arr = [nn.Flatten()]  # Flatten input images first # it was []
+            model_arr = [nn.Flatten()]
             curr_in = dim
             for size in model_config['hidden_sizes']:
                 model_arr.append(nn.Linear(curr_in, size, bias=bias))
@@ -66,33 +96,45 @@ def return_model(model_config, dim, num_class):
             model_arr.append(nn.Linear(curr_in, num_class, bias=bias))
             model = nn.Sequential(*model_arr)
         else:
-            model = nn.Sequential(nn.Flatten(), nn.Linear(dim, num_class, bias=bias)) # 
+            model = nn.Sequential(nn.Flatten(), nn.Linear(dim, num_class, bias=bias))
         return model
     elif model_config['type'] == 'resnet18':
         model = resnet18(weights=ResNet18_Weights.DEFAULT)
         if model_config['mode'] == 'linear':
+            # Linearized: ignore conv layers, just flatten input and classify
             model = nn.Sequential(nn.Flatten(),
-                                  nn.Linear(model.fc.in_features, num_class))
+                                  nn.Linear(dim, num_class))
         elif model_config['mode'] == 'conv1':
-            model = nn.Sequential(
-                model.layer4[1],  # Fourth residual block
-                model.avgpool,  # Global average pooling
-                nn.Flatten(),  # Flatten the tensor
-                nn.Linear(model.fc.in_features, num_class)  # Fully connected layer
-            )
-
-            for idx, param in enumerate(model.parameters()):
-                param.requires_grad = False
-                if idx == 2:
-                    break
+            # Full ResNet18 backbone, only last fc layer trainable
+            model.fc = nn.Linear(model.fc.in_features, num_class)
+            for name, param in model.named_parameters():
+                if 'fc' not in name:
+                    param.requires_grad = False
         elif model_config['mode'] == 'conv2':
-            model = nn.Sequential(
-                model.layer4[1],  # Fourth residual block
-                model.avgpool,  # Global average pooling
-                nn.Flatten(),  # Flatten the tensor
-                nn.Linear(model.fc.in_features, num_class)  # Fully connected layer
-            )
+            # Full ResNet18 backbone, all layers trainable
+            model.fc = nn.Linear(model.fc.in_features, num_class)
         return model
+
+
+@torch.no_grad()
+def precompute_features(backbone, dataset, batch_size, device):
+    """Run frozen backbone once and cache 512-dim features.
+    
+    Returns a TensorDataset of (features, labels) that can replace 
+    the original image dataset for fast training/eval.
+    """
+    loader = DataLoader(dataset, batch_size=batch_size, shuffle=False)
+    all_features = []
+    all_labels = []
+    backbone.eval()
+    backbone = backbone.to(device)
+    for data, target in loader:
+        data = data.to(device)
+        features = backbone(data)  # [B, 512]
+        all_features.append(features.cpu())
+        all_labels.append(target)
+    backbone = backbone.cpu()
+    return TensorDataset(torch.cat(all_features), torch.cat(all_labels))
 
 
 def replace_none_with_none(d):
@@ -125,7 +167,15 @@ def main():
                                                                    str(about_value),
                                                                    now.strftime('%Y-%m-%d-%H-%M-%S')))
     os.makedirs(experiment_dir)
-    logging.basicConfig(filename=os.path.join(experiment_dir, 'experiment.log'), level=logging.INFO)
+    # Log to both file and console
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s %(levelname)s: %(message)s',
+        handlers=[
+            logging.FileHandler(os.path.join(experiment_dir, 'experiment.log')),
+            logging.StreamHandler(),
+        ]
+    )
     logging.info('experiment started at %s', now.strftime('%Y-%m-%d %H:%M:%S'))
 
     # Initialize wandb
@@ -171,7 +221,11 @@ def main():
     dim = data_config['dim']
     num_class = data_config['num_class']
     model_type = config['train']['model']['type']
-    transforms = get_transforms(exact_dataset_type, model_type=model_type)
+    # Always use ResNet transform for these models
+    if model_type in ['linear', 'conv1', 'conv2', 'resnet18']:
+        transforms = get_transforms(exact_dataset_type, model_type='resnet18')
+    else:
+        transforms = get_transforms(exact_dataset_type, model_type=model_type)
     train_dataset, test_dataset = get_train_test_datasets(exact_dataset_type, transform=transforms,
                                                          train_path=data_config['train_path'],
                                                          test_path=data_config['test_path'],
@@ -218,6 +272,49 @@ def main():
     # set train test data
     forget_ratio = config['unlearn']['forget_ratio']
     retain_dataset, forget_dataset = get_retain_forget_datasets(train_dataset, forget_ratio)
+
+    # Feature precomputation for ResNet18 conv1 mode
+    # Run the frozen backbone once on all datasets, cache 512-dim features
+    # Then training/unlearning only operates on Linear(512, 10) — very fast
+    model_config = train_config['model']
+    use_precompute = (model_config.get('type') == 'resnet18' and model_config.get('mode') == 'conv1')
+    
+    if use_precompute:
+        logging.info('PRECOMPUTING ResNet18 FEATURES (conv1 mode)')
+        # Build full ResNet18 backbone (everything except fc)
+        backbone_model = resnet18(weights=ResNet18_Weights.DEFAULT)
+        backbone = nn.Sequential(
+            backbone_model.conv1,
+            backbone_model.bn1,
+            backbone_model.relu,
+            backbone_model.maxpool,
+            backbone_model.layer1,
+            backbone_model.layer2,
+            backbone_model.layer3,
+            backbone_model.layer4,
+            backbone_model.avgpool,
+            nn.Flatten(),
+        )
+        
+        # Precompute features for all datasets
+        logging.info('  Extracting features from train_dataset ({} samples)...'.format(len(train_dataset)))
+        train_dataset = precompute_features(backbone, train_dataset, train_config['batch_size'], device)
+        logging.info('  Extracting features from test_dataset ({} samples)...'.format(len(test_dataset)))
+        test_dataset = precompute_features(backbone, test_dataset, train_config['batch_size'], device)
+        logging.info('  Extracting features from retain_dataset ({} samples)...'.format(len(retain_dataset)))
+        retain_dataset = precompute_features(backbone, retain_dataset, train_config['batch_size'], device)
+        logging.info('  Extracting features from forget_dataset ({} samples)...'.format(len(forget_dataset)))
+        forget_dataset = precompute_features(backbone, forget_dataset, train_config['batch_size'], device)
+        logging.info('  Extracting features from dss_dataset ({} samples)...'.format(len(dss_dataset)))
+        dss_dataset = precompute_features(backbone, dss_dataset, train_config['batch_size'], device)
+        
+        del backbone, backbone_model
+        torch.cuda.empty_cache()
+        
+        # Override dim to 512 (ResNet18 feature dim)
+        dim = 512
+        logging.info('  Features cached. dim={}, all datasets replaced with 512-dim features'.format(dim))
+
     train_loader, test_loader = get_dataloaders([train_dataset, test_dataset], train_config['batch_size'])
     retain_loader, forget_loader = get_dataloaders([retain_dataset, forget_dataset], train_config['batch_size'])
     # NEW: Create loader for D_ss subset (used for Hessian computation)
@@ -237,7 +334,12 @@ def main():
 
     # set model
     model_config = train_config['model']
-    model = return_model(model_config, dim, num_class)
+    if use_precompute:
+        # With cached features, model is just a linear classifier on 512-dim inputs
+        model = nn.Linear(dim, num_class)
+        logging.info('Using precomputed features → model is nn.Linear({}, {})'.format(dim, num_class))
+    else:
+        model = return_model(model_config, dim, num_class)
     model = model.to(device)
     logging.info('model: {}'.format(model))
 
@@ -311,7 +413,10 @@ def main():
     # retrain
     logging.info('#####################')
     logging.info('RETRAIN FROM SCRATCH')
-    rmodel = return_model(model_config, dim, num_class)
+    if use_precompute:
+        rmodel = nn.Linear(dim, num_class)
+    else:
+        rmodel = return_model(model_config, dim, num_class)
     rmodel = rmodel.to(device)
     optimizer = torch.optim.Adam(rmodel.parameters(), lr=train_config['lr'])
     train(retain_loader, test_loader, rmodel, criterion, optimizer, num_epoch=num_epochs, device=device, log_prefix='retrained/')

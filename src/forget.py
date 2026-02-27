@@ -56,7 +56,13 @@ from src.utils import get_module_device, freeze_model, melt_model
 from src.loss import L2RegularizedCrossEntropyLoss
 from src.dv import train_dv_bound
 
+# mais added
+from copy import deepcopy
+import logging
+
 def batched_hvp(model, dataloader, criterion, params, vector, device):
+    # Ensure vector is on the correct device
+    vector = vector.to(device)
     hvp_result = None
     total_item = 0
     for X_batch, y_batch in tqdm(dataloader, desc="Computing HVP"):
@@ -68,8 +74,11 @@ def batched_hvp(model, dataloader, criterion, params, vector, device):
             loss = criterion(outputs, y_batch)
         gradients = torch.autograd.grad(loss, params, create_graph=True)
         grad_vector = torch.cat([g.view(-1) for g in gradients if g is not None])
+        grad_vector = grad_vector.to(device)
+        # Ensure grad_outputs is on the correct device
         hvp_batch = torch.autograd.grad(grad_vector, params, grad_outputs=vector, retain_graph=True)
         hvp_batch = torch.cat([h.reshape(-1) for h in hvp_batch if h is not None])
+        hvp_batch = hvp_batch.to(device)
 
         if hvp_result is None:
             hvp_result = (hvp_batch * X_batch.shape[0])
@@ -285,7 +294,13 @@ def calculate_linear_ce_hess(model, loader, l2_reg=0.0, parallel=False, cov=Fals
         with torch.no_grad():
             # Compute Hessian
             for batch_X, _ in tqdm(loader, desc="Calculating Hessian", leave=True):
-                batch_X = batch_X.to(device)  # shape: [B, D]
+                batch_X = batch_X.to(device)
+                
+                # Auto-flatten if input is 4D (CIFAR-10 images) #TODO: mais added - should be updated for more general cases
+                if batch_X.dim() > 2:
+                    batch_X = batch_X.view(batch_X.size(0), -1)
+                ####
+                
                 logits = model(batch_X)  # shape: [B, C]
                 probs = torch.softmax(logits, 1)  # shape: [B, C]
                 B = batch_X.size(0)
@@ -699,35 +714,34 @@ def subsampled_hessian_unlearning(model, dss_loader, forget_loader, criterion, d
     
     Parameters:
         model: Trained model with parameters w*
-        dss_loader: DataLoader for D_ss subset (for Hessian computation)
-        forget_loader: DataLoader for D_u (forget set)
-        criterion: Loss function
-        device: Device 
-        n1: Total training dataset size |D|
-        n2: Size of D_ss subset
-        m: Size of forget set |D_u|
-        eps: Privacy budget epsilon
-        delta: Privacy parameter small delta
-        eta: Confidence parameter (failure probability)
-        alpha: Strong convexity parameter - alpha
-        beta: Smoothness parameter - beta
-        gamma: Hessian-Lipschitz parameter - gamma
-        L: Lipschitz constant
-        d: Number of model parameters
-        C_constant: Concentration bound constant (default: 2.0)
+        dss_loader: dataLoader for D_ss subset (for Hessian computation)
+        forget_loader: dataLoader for D_u (forget set)
+        criterion: loss function - make sure it satisfies alpha-strong convexity and beta-smoothness assumptions...
+        device: device 
+        n1: total training dataset size |D|
+        n2: size of D_ss subset
+        m: size of forget set |D_u|
+        eps: privacy budget epsilon
+        delta: privacy parameter small delta
+        eta: confidence parameter (failure probability)
+        alpha: strong convexity parameter - alpha
+        beta: smoothness parameter - beta
+        gamma: hessian lipschitz parameter - gamma
+        L: lipschitz constant
+        d: number of model parameters
+        C_constant: concentration bound constant (default: 2.0)
         linear: If True, use analytical Hessian (paper's method for linearized networks)
                 If False, use conjugate gradient with implicit Hessian-vector products
     
     Returns:
         Unlearned model w'_r
     """
-    from copy import deepcopy
-    import logging
     
     logging.info('Starting subsampled hessian unlearning...')
     
-    # Make a copy of the model
-    umodel = deepcopy(model.to('cpu'))
+    # Make a copy of the model on the target device
+    umodel = deepcopy(model)
+    umodel = umodel.to(device)
     
     # Step 1: Compute noise scale 
     logging.info('Step 1: Computing noise scale')
@@ -756,7 +770,7 @@ def subsampled_hessian_unlearning(model, dss_loader, forget_loader, criterion, d
     
     # Step 2-3: Compute parameter update
     if linear:
-        # Option 1: Analytical Hessian (paper's method for linearized networks)
+        # paper's method for linearized networks - compute H_Dr analytically and apply update
         logging.info('Step 2-3: Computing H_Dr using analytical Hessian (linearized network)')
         logging.info('  Computing H_Dss on subset with {} samples...'.format(len(dss_loader.dataset)))
         H_dss = calculate_hessian(umodel, dss_loader, criterion, linear=True)
@@ -773,22 +787,24 @@ def subsampled_hessian_unlearning(model, dss_loader, forget_loader, criterion, d
         update_model(umodel, update)
         logging.info('  Applied parameter update using analytical Hessian')
     else:
-        # Option 2: Conjugate Gradient with implicit Hessian-vector products
-        # This avoids computing the full Hessian matrix (11TB for MLP!)
+        # implicit Hessian-vector products
+        # this avoids computing the full Hessian matrix - large
         logging.info('Step 2-3: Computing H_Dr^{-1} * grad using conjugate gradient (implicit Hessian)')
         logging.info('  Creating implicit Hessian-vector product functions...')
         
         # Define HVP function for D_ss
         params = [param for param in umodel.parameters() if param.requires_grad]
         def hvp_fn_dss(v):
+            # Ensure v is on the correct device
+            v = v.to(device)
             return batched_hvp(umodel, dss_loader, criterion, params, v, device)
-        
-        # Define HVP function for D_u (forget set)
+
         def hvp_fn_forget(v):
+            v = v.to(device)
             return batched_hvp(umodel, forget_loader, criterion, params, v, device)
-        
-        # Define combined HVP for H_Dr = (n1*H_Dss - m*H_Du)/(n1-m)
+
         def hvp_fn_dr(v):
+            v = v.to(device)
             hvp_dss = hvp_fn_dss(v)
             hvp_du = hvp_fn_forget(v)
             return (n1 * hvp_dss - m * hvp_du) / (n1 - m)
@@ -796,10 +812,13 @@ def subsampled_hessian_unlearning(model, dss_loader, forget_loader, criterion, d
         # Solve H_Dr^{-1} * grad using conjugate gradient (no full Hessian!)
         flat_grad, prev_sizes = _linearize_grads(grads)
         scaled_grad = (m / (n1 - m)) * flat_grad  # Scale gradient by m/(n1-m)
-        
+        scaled_grad = scaled_grad.to(device)
+
         logging.info('  Solving linear system using conjugate gradient...')
+        # Ensure conjugate_gradient output is on device
         update_flat = conjugate_gradient(hvp_fn_dr, scaled_grad, tol=1e-6, max_iter=100)
-        
+        update_flat = update_flat.to(device)
+
         # Reshape update to match parameter shapes
         update = _adjust_update(update_flat, prev_sizes)
         update_model(umodel, update)

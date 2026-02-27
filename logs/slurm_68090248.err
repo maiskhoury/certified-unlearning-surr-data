@@ -1,0 +1,25 @@
+2026-02-24 15:44:12,157 INFO: experiment started at 2026-02-24 15:44:12
+wandb: [wandb.login()] Loaded credentials for https://api.wandb.ai from /home/mais.khoury/.netrc.
+wandb: Currently logged in as: mais-khoury (mais-khoury-technion-israel-institute-of-technology) to https://api.wandb.ai. Use `wandb login --relogin` to force relogin
+wandb: setting up run 1oi1f9ad
+wandb: Tracking run with wandb version 0.25.0
+wandb: Run data is saved locally in experiments/unlearn-forget_ratio-0.1-2026-02-24-15-44-12/wandb/run-20260224_154412-1oi1f9ad
+wandb: Run `wandb offline` to turn off syncing.
+wandb: Syncing run unlearn-forget_ratio-0.1
+wandb: ⭐️ View project at https://wandb.ai/mais-khoury-technion-israel-institute-of-technology/certified-unlearning
+wandb: 🚀 View run at https://wandb.ai/mais-khoury-technion-israel-institute-of-technology/certified-unlearning/runs/1oi1f9ad
+2026-02-24 15:44:14,136 INFO: wandb initialized: project=certified-unlearning, entity=None
+2026-02-24 15:44:14,142 INFO: configuration file copied to ./experiments/unlearn-forget_ratio-0.1-2026-02-24-15-44-12/config.yaml
+2026-02-24 15:44:14,145 INFO: seed: 42
+2026-02-24 15:44:14,145 INFO: device: cpu
+2026-02-24 15:44:14,145 INFO: #####################
+2026-02-24 15:44:14,145 INFO: setting data
+2026-02-24 15:44:15,679 INFO: training dataset and D_ss subset created
+2026-02-24 15:44:15,680 INFO: full training dataset size: 50000, dim: 3072
+2026-02-24 15:44:15,680 INFO: D_ss subset size: 10000 (20.0% of training data)
+2026-02-24 15:44:15,680 INFO: #####################
+2026-02-24 15:44:15,681 INFO: #####################
+2026-02-24 15:44:15,681 INFO: training setup
+2026-02-24 15:44:15,683 INFO: PRECOMPUTING ResNet18 FEATURES (conv1 mode)
+2026-02-24 15:44:15,881 INFO:   Extracting features from train_dataset (50000 samples)...
+slurmstepd: error: *** JOB 68090248 ON dym-lab3 CANCELLED AT 2026-02-24T15:53:22 ***

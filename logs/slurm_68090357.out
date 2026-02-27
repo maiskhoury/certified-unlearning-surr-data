@@ -1,0 +1,146 @@
+CUDA_VISIBLE_DEVICES: 0
+Tue Feb 24 18:18:07 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 550.144.03             Driver Version: 550.144.03     CUDA Version: 12.4     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA L40S                    On  |   00000000:B4:00.0 Off |                  Off |
+| N/A   31C    P8             34W /  350W |       1MiB /  49140MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI        PID   Type   Process name                              GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+======================================
+Job ID: 68090357
+Node: clair1
+Start time: Tue Feb 24 06:18:08 PM IST 2026
+======================================
+Files already downloaded and verified
+Files already downloaded and verified
+FPR:0.49, FNR:0.49, FP215.00, TN224.00, TP285.00, FN276.00
+FPR:0.49, FNR:0.49, FP209.00, TN220.00, TP291.00, FN280.00
+FPR:0.48, FNR:0.49, FP198.00, TN211.00, TP302.00, FN289.00
+FPR:0.49, FNR:0.49, FP199.00, TN205.00, TP301.00, FN295.00
+FPR:0.48, FNR:0.49, FP214.00, TN230.00, TP286.00, FN270.00
+done somewhere in epoch 1
+norm of the conjugate gradient: 17.31646156311035
+norm of the conjugate gradient: 22.985506057739258
+norm of the conjugate gradient: 33.6026725769043
+norm of the conjugate gradient: 42.704566955566406
+norm of the conjugate gradient: 72.70894622802734
+norm of the conjugate gradient: 235.1559295654297
+norm of the conjugate gradient: 96.65863800048828
+norm of the conjugate gradient: 53.523765563964844
+norm of the conjugate gradient: 38.853206634521484
+norm of the conjugate gradient: 29.4066104888916
+norm of the conjugate gradient: 24.766246795654297
+norm of the conjugate gradient: 26.952220916748047
+norm of the conjugate gradient: 46.0092658996582
+norm of the conjugate gradient: 98.68350219726562
+norm of the conjugate gradient: 207.01974487304688
+norm of the conjugate gradient: 132.50559997558594
+norm of the conjugate gradient: 49.99234390258789
+norm of the conjugate gradient: 38.215362548828125
+norm of the conjugate gradient: 42.39163589477539
+norm of the conjugate gradient: 31.734298706054688
+norm of the conjugate gradient: 43.896202087402344
+norm of the conjugate gradient: 62.189056396484375
+norm of the conjugate gradient: 66.51803588867188
+norm of the conjugate gradient: 169.3179473876953
+norm of the conjugate gradient: 443.5578308105469
+norm of the conjugate gradient: 592.384033203125
+norm of the conjugate gradient: 91.76782989501953
+norm of the conjugate gradient: 49.411827087402344
+norm of the conjugate gradient: 38.1415901184082
+norm of the conjugate gradient: 34.550662994384766
+norm of the conjugate gradient: 48.006404876708984
+norm of the conjugate gradient: 66.26826477050781
+norm of the conjugate gradient: 85.2105712890625
+norm of the conjugate gradient: 110.66817474365234
+norm of the conjugate gradient: 466.6068420410156
+norm of the conjugate gradient: 1428.32763671875
+norm of the conjugate gradient: 93.17176818847656
+norm of the conjugate gradient: 97.83612060546875
+norm of the conjugate gradient: 50.83378219604492
+norm of the conjugate gradient: 47.951324462890625
+norm of the conjugate gradient: 46.94981384277344
+norm of the conjugate gradient: 44.68452453613281
+norm of the conjugate gradient: 49.11201477050781
+norm of the conjugate gradient: 43.345149993896484
+norm of the conjugate gradient: 59.94934844970703
+norm of the conjugate gradient: 85.98063659667969
+norm of the conjugate gradient: 337.09210205078125
+norm of the conjugate gradient: 20658.9296875
+norm of the conjugate gradient: 94.93643951416016
+norm of the conjugate gradient: 106.04610443115234
+norm of the conjugate gradient: 62.03666687011719
+norm of the conjugate gradient: 57.130306243896484
+norm of the conjugate gradient: 59.87006378173828
+norm of the conjugate gradient: 40.799720764160156
+norm of the conjugate gradient: 53.103492736816406
+norm of the conjugate gradient: 40.56736373901367
+norm of the conjugate gradient: 69.51438903808594
+norm of the conjugate gradient: 120.71590423583984
+norm of the conjugate gradient: 181.38392639160156
+norm of the conjugate gradient: 333.6454772949219
+norm of the conjugate gradient: 436.5632629394531
+norm of the conjugate gradient: 198.12440490722656
+norm of the conjugate gradient: 151.52365112304688
+norm of the conjugate gradient: 64.29724884033203
+norm of the conjugate gradient: 49.44459915161133
+norm of the conjugate gradient: 61.02128601074219
+norm of the conjugate gradient: 57.242923736572266
+norm of the conjugate gradient: 50.82195281982422
+norm of the conjugate gradient: 80.414306640625
+norm of the conjugate gradient: 208.23764038085938
+norm of the conjugate gradient: 488.91180419921875
+norm of the conjugate gradient: 268.0220031738281
+norm of the conjugate gradient: 158.55345153808594
+norm of the conjugate gradient: 75.3810806274414
+norm of the conjugate gradient: 78.70999908447266
+norm of the conjugate gradient: 49.25892639160156
+norm of the conjugate gradient: 56.38256072998047
+norm of the conjugate gradient: 59.585784912109375
+norm of the conjugate gradient: 46.409366607666016
+norm of the conjugate gradient: 47.9130744934082
+norm of the conjugate gradient: 75.02549743652344
+norm of the conjugate gradient: 88.51042938232422
+norm of the conjugate gradient: 119.01376342773438
+norm of the conjugate gradient: 145.2215118408203
+norm of the conjugate gradient: 397.8172607421875
+norm of the conjugate gradient: 11926.392578125
+norm of the conjugate gradient: 122.03475189208984
+norm of the conjugate gradient: 74.8004150390625
+norm of the conjugate gradient: 99.35857391357422
+norm of the conjugate gradient: 69.70378875732422
+norm of the conjugate gradient: 70.68992614746094
+norm of the conjugate gradient: 67.11663055419922
+norm of the conjugate gradient: 77.05305480957031
+norm of the conjugate gradient: 68.62849426269531
+norm of the conjugate gradient: 115.79561614990234
+norm of the conjugate gradient: 671.4112548828125
+norm of the conjugate gradient: 473.06341552734375
+norm of the conjugate gradient: 143.74502563476562
+norm of the conjugate gradient: 121.01322174072266
+norm of the conjugate gradient: 104.95053100585938
+FPR:0.57, FNR:0.51, FP67.00, TN51.00, TP433.00, FN449.00
+FPR:0.48, FNR:0.50, FP55.00, TN60.00, TP445.00, FN440.00
+FPR:0.60, FNR:0.51, FP76.00, TN51.00, TP424.00, FN449.00
+FPR:0.45, FNR:0.49, FP55.00, TN66.00, TP445.00, FN434.00
+FPR:0.46, FNR:0.49, FP53.00, TN62.00, TP447.00, FN438.00
+done somewhere in epoch 1
+done somewhere in epoch 2
+done somewhere in epoch 3
+done somewhere in epoch 4
+======================================
+End time: Tue Feb 24 06:47:59 PM IST 2026
+======================================

@@ -1,0 +1,39 @@
+CUDA_VISIBLE_DEVICES: 0
+Tue Feb 24 16:13:06 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 550.144.03             Driver Version: 550.144.03     CUDA Version: 12.4     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA L40S                    On  |   00000000:B4:00.0 Off |                  Off |
+| N/A   27C    P8             34W /  350W |       1MiB /  49140MiB |      0%      Default |
+|                                         |                        |                  N/A |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI        PID   Type   Process name                              GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+======================================
+Job ID: 68090259
+Node: clair1
+Start time: Tue Feb 24 04:13:06 PM IST 2026
+======================================
+Files already downloaded and verified
+Files already downloaded and verified
+FPR:0.50, FNR:0.51, FP356.00, TN349.00, TP144.00, FN151.00
+FPR:0.51, FNR:0.52, FP343.00, TN330.00, TP157.00, FN170.00
+FPR:0.50, FNR:0.50, FP342.00, TN342.00, TP158.00, FN158.00
+FPR:0.49, FNR:0.47, FP332.00, TN350.00, TP168.00, FN150.00
+FPR:0.51, FNR:0.53, FP355.00, TN338.00, TP145.00, FN162.00
+done somewhere in epoch 1
+[1;34mwandb[0m: 
+[1;34mwandb[0m: 🚀 View run [33munlearn-forget_ratio-0.1[0m at: [34mhttps://wandb.ai/mais-khoury-technion-israel-institute-of-technology/certified-unlearning/runs/rhxcsoge[0m
+======================================
+End time: Tue Feb 24 04:15:55 PM IST 2026
+======================================

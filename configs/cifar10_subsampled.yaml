@@ -8,12 +8,13 @@ setup:
     project: certified-unlearning
     entity: null  # wandb username - mais.khoury
     name: cifar10_subsampled_forget_ratio_0.1
+
 # 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 
 
 data:
   exact_dataset: cifar10
   surrogate_dataset: null  # Not using surrogate dataset anymore
-  dim: 3072  # 32*32*3 for CIFAR10
+  dim: 150528  # 224*224*3 for 224x224 input
   num_class: 10
   train_path: null
   test_path: null
@@ -26,27 +27,28 @@ data:
 
 train:
   batch_size: 128
-  num_epochs: 50
+  num_epochs: 50 # try 50 or 200 for better convergence
   lr: 0.001
   lambda: 0.01  # L2 regularization
   model:
-    type: mlp # resnet18 try it 
-    hidden_sizes: [512, 256]
+    type: resnet18  # or 'conv1' or 'conv2' for your custom models with 224x224 input
+    hidden_sizes: null
     activation: relu
     bias: true
+    mode: conv1
 
 unlearn:
-  forget_ratio: 0.1
+  forget_ratio: 0 # 0.1 if it is int then class unlearn else if it is float then random unlearn - class 0 in cifar is 
   # Privacy parameters
-  eps_multiplier: 1.0
-  eps_power: 0
-  delta: 0.00001         # Privacy parameter (probability of privacy failure)
-  eta: 0.01              # Confidence parameter (failure probability) - user chooses this
+  eps_multiplier: 5.0
+  eps_power: 3.0
+  delta: 1.0         # Privacy parameter (probability of privacy failure)
+  eta: 0.01              # Confidence parameter (failure probability) - user chooses this -  new param
   # Regularity assumptions (Assumption 1 from paper)
-  alpha: 1.0             # Strong convexity parameter - alpha
+  alpha: 1.1             # Strong convexity parameter - alpha 1 + l2-reg (INCREASED to handle large models)
   beta: 1.0              # Smoothness parameter - beta
   gamma: 1.0             # Hessian-Lipschitz parameter - gamma
-  L: 1.0                 # Lipschitz constant
+  L: 1.1                 # Lipschitz constant
   C_constant: 2.0        # Constant for concentration bound
   # Old parameters (may not be used)
   smooth: 1
@@ -55,15 +57,15 @@ unlearn:
   hlip: 1
   # Method selection
   surr: false            # Not using surrogate approach
-  known: false
-  linear: true           # TRUE = Analytical Hessian (paper's linearized method)
+  known: false # flag for access to statistical information about the data distribution
+  linear: false           # TRUE = Analytical Hessian (paper's linearized method)
                          # FALSE = Conjugate gradient (implicit Hessian)
-  parallel: false
+  parallel: false # what is this??
   cov: false
   conjugate: false       # Use Newton update instead of conjugate gradient
   
   # Subsampled-Hessian method parameters
   subsampled: true       # Enable the new subsampled-Hessian algorithm
-  subsample_ratio: 0.3   # Use 30% of training data for D_ss subset
+  subsample_ratio: 0.1   # Use 10% of training data for D_ss subset (larger n2 → smaller xi)
 
 langevin:

@@ -1,0 +1,59 @@
+CUDA_VISIBLE_DEVICES: 0
+Tue Feb 24 19:08:07 2026       
++---------------------------------------------------------------------------------------+
+| NVIDIA-SMI 535.247.01             Driver Version: 535.247.01   CUDA Version: 12.2     |
+|-----------------------------------------+----------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id        Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |         Memory-Usage | GPU-Util  Compute M. |
+|                                         |                      |               MIG M. |
+|=========================================+======================+======================|
+|   0  NVIDIA L40                     Off | 00000000:B3:00.0 Off |                  Off |
+| N/A   29C    P8              34W / 300W |      0MiB / 49140MiB |      0%      Default |
+|                                         |                      |                  N/A |
++-----------------------------------------+----------------------+----------------------+
+                                                                                         
++---------------------------------------------------------------------------------------+
+| Processes:                                                                            |
+|  GPU   GI   CI        PID   Type   Process name                            GPU Memory |
+|        ID   ID                                                             Usage      |
+|=======================================================================================|
+|  No running processes found                                                           |
++---------------------------------------------------------------------------------------+
+======================================
+Job ID: 68090410
+Node: euler1
+Start time: Tue Feb 24 07:08:08 PM IST 2026
+======================================
+Files already downloaded and verified
+Files already downloaded and verified
+FPR:nan, FNR:0.50, FP0.00, TN0.00, TP500.00, FN500.00
+FPR:0.50, FNR:nan, FP500.00, TN500.00, TP0.00, FN0.00
+FPR:0.52, FNR:0.52, FP258.00, TN240.00, TP242.00, FN260.00
+FPR:nan, FNR:0.50, FP0.00, TN0.00, TP500.00, FN500.00
+FPR:0.52, FNR:0.52, FP270.00, TN249.00, TP230.00, FN251.00
+done somewhere in epoch 1
+norm of the conjugate gradient: 0.03361770138144493
+norm of the conjugate gradient: 0.03241536021232605
+norm of the conjugate gradient: 0.016127364709973335
+norm of the conjugate gradient: 0.02426518127322197
+norm of the conjugate gradient: 0.02394242398440838
+norm of the conjugate gradient: 0.021668870002031326
+norm of the conjugate gradient: 0.43308261036872864
+norm of the conjugate gradient: 0.023639751598238945
+norm of the conjugate gradient: 0.01552380621433258
+norm of the conjugate gradient: 0.015364548191428185
+norm of the conjugate gradient: 0.0166737362742424
+norm of the conjugate gradient: 0.7853708267211914
+norm of the conjugate gradient: 0.04769919812679291
+norm of the conjugate gradient: 0.011526398360729218
+norm of the conjugate gradient: 0.012020695954561234
+norm of the conjugate gradient: 0.012283874675631523
+norm of the conjugate gradient: 0.012778153643012047
+norm of the conjugate gradient: 0.036251798272132874
+norm of the conjugate gradient: 0.014045098796486855
+norm of the conjugate gradient: 0.007736597675830126
+norm of the conjugate gradient: 0.0128748444840312
+norm of the conjugate gradient: 0.014784585684537888
+norm of the conjugate gradient: 0.021862197667360306
+norm of the conjugate gradient: 0.014728263020515442
+norm of the conjugate gradient: 0.015921197831630707
